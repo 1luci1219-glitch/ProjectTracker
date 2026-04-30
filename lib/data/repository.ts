@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { ActivityLog, Company, FmAction, FmAddendum, FmDosar, FmDosarStatus, FmDosarType, PnrrClarification, Project, ProjectNote } from "@/lib/types";
+import * as demo from "@/lib/demo-data";
 
 type DbCompany = {
   id: string;
@@ -233,9 +234,25 @@ export async function getDataset() {
       .from("fm_dosare")
       .select("id, project_id, company_id, dosar_type, status, notes, updated_at");
 
+    const companies = (companiesRes.data ?? []).map(mapCompany);
+    const projects = (projectsRes.data ?? []).map(mapProject);
+
+    if (projects.length === 0) {
+      return {
+        companies: demo.companies,
+        projects: demo.projects,
+        pnrrClarifications: demo.pnrrClarifications,
+        fmActions: demo.fmActions,
+        fmAddenda: demo.fmAddenda,
+        fmDosare: demo.fmDosare,
+        projectNotes: demo.projectNotes,
+        activityLogs: demo.activityLogs
+      };
+    }
+
     return {
-      companies: (companiesRes.data ?? []).map(mapCompany),
-      projects: (projectsRes.data ?? []).map(mapProject),
+      companies,
+      projects,
       pnrrClarifications: (pnrrRes.data ?? []).map(mapPnrrClarification),
       fmActions: (fmActionsRes.data ?? []).map(mapFmAction),
       fmAddenda: (fmAddendaRes.data ?? []).map(mapFmAddendum),
@@ -246,14 +263,14 @@ export async function getDataset() {
   } catch (error) {
     console.error("Supabase dataset fallback:", error);
     return {
-      companies: [],
-      projects: [],
-      pnrrClarifications: [],
-      fmActions: [],
-      fmAddenda: [],
-      fmDosare: [] as FmDosar[],
-      projectNotes: [],
-      activityLogs: []
+      companies: demo.companies,
+      projects: demo.projects,
+      pnrrClarifications: demo.pnrrClarifications,
+      fmActions: demo.fmActions,
+      fmAddenda: demo.fmAddenda,
+      fmDosare: demo.fmDosare,
+      projectNotes: demo.projectNotes,
+      activityLogs: demo.activityLogs
     };
   }
 }
