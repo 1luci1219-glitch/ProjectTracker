@@ -1,69 +1,142 @@
-import Link from "next/link";
-import { AlertTriangle, Building2, Clock3, FolderKanban } from "lucide-react";
-import { MetricCard } from "@/components/ui/metric-card";
-import { SectionHeader } from "@/components/ui/section";
-import { Badge } from "@/components/ui/badge";
-import { SimpleTable } from "@/components/tables/simple-table";
-import { clarificationUrgency, isClarificationAnswered, pendingTransmission, summarizeFm, summarizePnrr } from "@/lib/domain";
+import { Building2, FolderOpen, Send, AlertTriangle } from "lucide-react";
+import { HeroHeader } from "@/components/dashboard/hero-header";
+import { HeroStat } from "@/components/dashboard/hero-stat";
+import { Heatmap } from "@/components/dashboard/heatmap";
+import { AttentionPanel } from "@/components/dashboard/attention-panel";
+import { ActivityTimeline } from "@/components/dashboard/activity-timeline";
+import { DonutChart } from "@/components/charts/donut-chart";
+import { BarChartHorizontal } from "@/components/charts/bar-chart";
+import { LineChartArea } from "@/components/charts/line-chart";
 import { getDataset } from "@/lib/data/repository";
+import {
+  buildHeatmap,
+  computeDosareDistribution,
+  computeHeroStats,
+  computePnrrStatusDistribution,
+  computeTop10Beneficiari,
+  computeWeeklyActivity,
+  findIncompleteDosare,
+  findUrgentClarifications,
+  summarizeActivity
+} from "@/lib/dashboard-metrics";
 
-export default async function GeneralDashboardPage() {
-  const { companies, fmActions, fmAddenda, fmDosare, pnrrClarifications, projects } = await getDataset();
-  const pnrr = summarizePnrr(pnrrClarifications, projects);
-  const fm = summarizeFm(fmActions, fmAddenda, projects, fmDosare);
-  const activeProjects = projects.filter((project) => project.generalStatus !== "Închis").length;
+export default async function DashboardPage() {
+  const data = await getDataset();
+  const stats = computeHeroStats(data.projects, data.fmDosare, data.fmActions, data.pnrrClarifications);
+  const dosareDist = computeDosareDistribution(data.fmDosare);
+  const top10 = computeTop10Beneficiari(data.projects, data.fmDosare, data.companies);
+  const weekly = computeWeeklyActivity(data.projects, data.fmDosare, data.fmActions, data.pnrrClarifications);
+  const pnrrDist = computePnrrStatusDistribution(data.pnrrClarifications);
+  const heatmap = buildHeatmap(data.projects, data.fmDosare, data.companies);
+  const problems = findIncompleteDosare(data.projects, data.fmDosare, data.companies);
+  const urgent = findUrgentClarifications(data.pnrrClarifications, data.projects, data.companies);
+  const activity = summarizeActivity(data.activityLogs);
 
-  const projectHealthRows = projects.map((project) => {
-    const company = companies.find((candidate) => candidate.id === project.companyId);
-    if (project.programmeType === "fm") {
-      const actions = fmActions.filter((item) => item.projectId === project.id);
-      const completedActions = actions.filter((item) => !pendingTransmission(item.transmittedStatus)).length;
-      const progress = actions.length ? Math.round((completedActions / actions.length) * 100) : 0;
-      const addendum = fmAddenda.find((item) => item.projectId === project.id);
-      const risk = addendum && pendingTransmission(addendum.platformStatus) ? "Atenție" : "Stabil";
-      return [
-        company?.name ?? "Necunoscut",
-        <Link key="project" href={`/fm/${project.id}`} className="font-semibold text-[var(--ink)] hover:text-[var(--accent)]">{project.projectLabel}</Link>,
-        "FM",
-        `${progress}%`,
-        <Badge key="risk" tone={risk === "Atenție" ? "warning" : "success"}>{risk}</Badge>,
-        <Badge key="status" tone={project.generalStatus === "Închis" ? "success" : "neutral"}>{project.generalStatus}</Badge>
-      ];
-    }
-
-    const clarifications = pnrrClarifications.filter((item) => item.projectId === project.id);
-    const answered = clarifications.filter(isClarificationAnswered).length;
-    const progress = clarifications.length ? Math.round((answered / clarifications.length) * 100) : 0;
-    const urgent = clarifications.filter((item) => ["urgent", "overdue"].includes(clarificationUrgency(item))).length;
-    return [
-      company?.name ?? "Necunoscut",
-      <Link key="project" href={`/pnrr/${project.id}`} className="font-semibold text-[var(--ink)] hover:text-[var(--accent)]">{project.projectLabel}</Link>,
-      "PNRR",
-      `${progress}%`,
-      <Badge key="risk" tone={urgent > 0 ? "danger" : "success"}>{urgent > 0 ? "Urgent" : "Stabil"}</Badge>,
-      <Badge key="status" tone={project.generalStatus === "Închis" ? "success" : "neutral"}>{project.generalStatus}</Badge>
-    ];
-  });
+  const totalDosare = dosareDist.reduce((sum, s) => sum + s.value, 0);
+  const uploadedDosare = dosareDist.find((s) => s.label === "Încărcat")?.value ?? 0;
 
   return (
-    <div>
-      <SectionHeader
-        eyebrow="Privire de ansamblu"
-        title="Dashboard general"
-        description="Situația agregată pentru clarificări PNRR / REPowerEU și operațiuni MySMIS din Fondul de Modernizare."
-      />
+    <div className="space-y-6">
+      <HeroHeader />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={FolderKanban} label="Proiecte active" value={activeProjects} detail="PNRR + FM" />
-        <MetricCard icon={Building2} label="Proiecte FM" value={fm.projects} detail="În implementare" />
-        <MetricCard icon={Clock3} label="Clarificări nerezolvate" value={pnrr.unanswered} detail="Răspuns netransmis" />
-        <MetricCard icon={AlertTriangle} label="AA FM restante" value={fm.pendingAddenda} tone="warning" detail="Necesită acțiune" />
-      </div>
-
-      <section className="mt-6">
-        <SectionHeader title="Health proiecte" description="Vedere rapidă pe UAT, modul și progres operațional." />
-        <SimpleTable columns={["UAT", "Proiect", "Modul", "Progres", "Risc", "Status"]} rows={projectHealthRows} />
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <HeroStat
+          label="Proiecte FM"
+          value={stats.fmProjects}
+          icon={<Building2 className="h-5 w-5" />}
+          tone="mint"
+          trend={stats.fmTrend}
+          detail="active în implementare"
+        />
+        <HeroStat
+          label="Dosare incomplete"
+          value={stats.incompleteDosare}
+          icon={<FolderOpen className="h-5 w-5" />}
+          tone="amber"
+          detail={`${stats.incompletePercent}% complet la nivel global`}
+        />
+        <HeroStat
+          label="Cereri netransmise"
+          value={stats.pendingCereri}
+          icon={<Send className="h-5 w-5" />}
+          tone="rose"
+          detail="CR1 / prefinanțare / finale"
+        />
+        <HeroStat
+          label="Clarificări urgente"
+          value={stats.urgentClarifications}
+          icon={<AlertTriangle className="h-5 w-5" />}
+          tone="sky"
+          detail={
+            stats.mostUrgentDays === null
+              ? "Nicio urgență"
+              : stats.mostUrgentDays < 0
+                ? `cea mai veche: ${Math.abs(stats.mostUrgentDays)}z întârziere`
+                : `cea mai apropiată: ${stats.mostUrgentDays}z`
+          }
+        />
       </section>
+
+      <section className="grid gap-5 xl:grid-cols-2">
+        <ChartPanel
+          title="Status dosare achiziții"
+          subtitle={`${uploadedDosare}/${totalDosare} încărcate`}
+        >
+          <DonutChart
+            data={dosareDist}
+            centerValue={totalDosare ? `${Math.round((uploadedDosare / totalDosare) * 100)}%` : "0%"}
+            centerLabel="încărcate"
+          />
+        </ChartPanel>
+
+        <ChartPanel title="Top 10 beneficiari după progres" subtitle="dosare de achiziții încărcate">
+          <BarChartHorizontal data={top10} />
+        </ChartPanel>
+
+        <ChartPanel title="Activitate ultimele 14 zile" subtitle="actualizări proiecte + dosare + cereri + clarificări">
+          <LineChartArea data={weekly} />
+        </ChartPanel>
+
+        <ChartPanel title="Status clarificări PNRR" subtitle={`${data.pnrrClarifications.length} total`}>
+          <DonutChart
+            data={pnrrDist}
+            centerValue={data.pnrrClarifications.length}
+            centerLabel="clarificări"
+          />
+        </ChartPanel>
+      </section>
+
+      <section>
+        <Heatmap rows={heatmap} />
+      </section>
+
+      <section>
+        <AttentionPanel problems={problems} urgent={urgent} />
+      </section>
+
+      <section>
+        <ActivityTimeline entries={activity} />
+      </section>
+    </div>
+  );
+}
+
+function ChartPanel({
+  title,
+  subtitle,
+  children
+}: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="panel p-5">
+      <div className="mb-3">
+        <h3 className="text-base font-semibold text-[var(--ink)]">{title}</h3>
+        <p className="text-xs text-[var(--muted)]">{subtitle}</p>
+      </div>
+      {children}
     </div>
   );
 }

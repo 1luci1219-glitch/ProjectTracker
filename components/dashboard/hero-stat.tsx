@@ -1,6 +1,6 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { Sparkline } from "@/components/charts/sparkline";
 import { useCountUp } from "@/lib/hooks/use-count-up";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,7 @@ export function HeroStat({
   label,
   value,
   detail,
-  icon: Icon,
+  icon,
   tone,
   trend,
   suffix
@@ -27,7 +27,7 @@ export function HeroStat({
   label: string;
   value: number;
   detail?: string;
-  icon: LucideIcon;
+  icon: ReactNode;
   tone: Tone;
   trend?: number[];
   suffix?: string;
@@ -67,7 +67,7 @@ export function HeroStat({
             filter: `drop-shadow(0 0 12px ${t.glow})`
           }}
         >
-          <Icon className="h-5 w-5" />
+          {icon}
         </div>
       </div>
 
